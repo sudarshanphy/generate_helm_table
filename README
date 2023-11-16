@@ -1,0 +1,4 @@
+a simple compile and link should work.
+
+ifort eosfxt.f90 -o eosfxt.exe
+
