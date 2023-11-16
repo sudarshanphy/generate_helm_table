@@ -112,13 +112,13 @@ subroutine get_helm_table(temp,den,f,fd,ft,fdd,ftt,fdt,fddt,fdtt,fddtt)
    tmp = den + den/1.0d3
    delta = tmp - den
    
-   !fddt = dfridr1(freedt,temp,den,delta,err)
-   !fdtt = dfridr1(freett,temp,den,delta,err)
-   !fddtt = dfridr2(freett,temp,den,delta,err)
+   fddt = dfridr1(freedt,temp,den,delta,err)
+   fdtt = dfridr1(freett,temp,den,delta,err)
+   fddtt = dfridr2(freett,temp,den,delta,err)
    
-   fddt =   0.0d0 ! dfridr1(freedt,temp,den,delta,err)
-   fdtt =   0.0d0 !  dfridr1(freett,temp,den,delta,err)
-   fddtt =  0.0d0 !   dfridr2(freett,temp,den,delta,err)
+   !fddt =   0.0d0 ! dfridr1(freedt,temp,den,delta,err)
+   !fdtt =   0.0d0 !  dfridr1(freett,temp,den,delta,err)
+   !fddtt =  0.0d0 !   dfridr2(freett,temp,den,delta,err)
    
    !tmp = helm_energy(temp,den)
    
