@@ -1,32 +1,61 @@
    program construct_table
        implicit none
        double precision :: temp, den, f, ft, fd, ftt, &
-                           fdd, fdt, fddt, fdtt, fddtt
+                           fdd, fdt, fddt, fdtt, fddtt, &
+                           dpdd,dpddd,dpddt,dpdddt, &
+                           mu,dmudd,dmudt,dmuddt, &
+                           ne,dnedd,dnedt,dneddt
        double precision :: tlo, thi, tstp, tstpi, tsav, &
                            dlo, dhi, dstp, dstpi, dsav
        integer :: i, j, imax, jmax 
 
        interface
              subroutine get_helm_table(temp, den , f, ft, fd, ftt, fdd, &
-                             fdt, fddt, fdtt, fddtt)
+                         fdt, fddt, fdtt, fddtt, &
+                         dpdd,dpddd,dpddt,dpdddt, &
+                         mu,dmudd,dmudt,dmuddt, &
+                         ne,dnedd,dnedt,dneddt)
                         double precision, intent(in):: temp,den
                         double precision, intent(out) :: f, ft, fd, ftt, fdd, fdt
                         double precision, intent(out) :: fddt, fdtt, fddtt 
+                        double precision, intent(out) :: dpdd,dpddd,dpddt,dpdddt
+                        double precision, intent(out) :: mu,dmudd,dmudt,dmuddt
+                        double precision, intent(out) :: ne,dnedd,dnedt,dneddt
              end subroutine get_helm_table
        end interface
 02    format(1x,1p9E24.16)
-#if 0
+#if 1
        temp = 1.0d3
        den = 1.0d-12
-       !temp = 1.0d13
-       !den = 1.0d15
        call get_helm_table(temp, den, f, fd, ft, fdd, ftt, fdt, &
-                             fddt, fdtt, fddtt)
+                             fddt, fdtt, fddtt, &
+                             dpdd,dpddd,dpddt,dpdddt, &
+                             mu,dmudd,dmudt,dmuddt, &
+                             ne,dnedd,dnedt,dneddt)
+       write(6,*) "temp = 1.0d3, dens = 1.0d-12"
        write(6,02) f,fd,ft,fdd,ftt,fdt, &
                   fddt,fdtt,fddtt
+       write(6,02) dpdd, dpddd, dpddt, dpdddt
+       write(6,02) mu, dmudd, dmudt, dmuddt
+       write(6,02) ne, dnedd, dnedt, dneddt
+       
+       write(6,*) "-------------------------------------"
+       temp = 1.0d13
+       den = 1.0d15
+       call get_helm_table(temp, den, f, fd, ft, fdd, ftt, fdt, &
+                             fddt, fdtt, fddtt, &
+                             dpdd,dpddd,dpddt,dpdddt, &
+                             mu,dmudd,dmudt,dmuddt, &
+                             ne,dnedd,dnedt,dneddt)
+       write(6,*) "temp = 1.0d13, dens = 1.0d15"
+       write(6,02) f,fd,ft,fdd,ftt,fdt, &
+                  fddt,fdtt,fddtt
+       write(6,02) dpdd, dpddd, dpddt, dpdddt
+       write(6,02) mu, dmudd, dmudt, dmuddt
+       write(6,02) ne, dnedd, dnedt, dneddt
 #endif
-#if 1
-       open(unit=19,file='helm_table_large.txt',status='new')
+#if 0
+       open(unit=19,file='helm_table_large.txt',status='unknown')
        
        imax = 561
        jmax = 241
@@ -49,7 +78,10 @@
          den = 10.0d0**(dsav)
 
          call get_helm_table(temp, den, f, fd, ft, fdd, ftt, fdt, &
-                             fddt, fdtt, fddtt)
+                             fddt, fdtt, fddtt, &
+                             dpdd,dpddd,dpddt,dpdddt, &
+                             mu,dmudd,dmudt,dmuddt, &
+                             ne,dnedd,dnedt,dneddt)
          write(19,02) f,fd,ft,fdd,ftt,fdt, &
                   fddt,fdtt,fddtt
         enddo
@@ -60,15 +92,22 @@
    end program construct_table
 
 
-subroutine get_helm_table(temp,den,f,fd,ft,fdd,ftt,fdt,fddt,fdtt,fddtt)
+subroutine get_helm_table(temp,den,f,fd,ft,fdd,ftt,fdt,fddt,fdtt,fddtt, &
+                         dpdd,dpddd,dpddt,dpdddt, &
+                         mu,dmudd,dmudt,dmuddt, &
+                         ne,dnedd,dnedt,dneddt)
    include 'implno.dek'
    include 'vector_eos.dek'
    
    double precision, intent(in):: temp,den
    double precision, intent(out) :: f, ft, fd, ftt, fdd, fdt
    double precision, intent(out) :: fddt, fdtt, fddtt 
-   double precision :: err, tmp, delta
-   external :: freedt, freett!, helm_energy 
+   double precision, intent(out) :: dpdd,dpddd,dpddt,dpdddt
+   double precision, intent(out) :: mu,dmudd,dmudt,dmuddt
+   double precision, intent(out) :: ne,dnedd,dnedt,dneddt
+   double precision :: err, tmp, delta, dpdt
+   external :: freedt, freett, deriv_dmudt, deriv_dnedt, &
+                               deriv_dpdd, deriv_dpdt!, helm_energy 
    interface
       function dfridr1(f,t,d,h,err)
            implicit none
@@ -82,24 +121,17 @@ subroutine get_helm_table(temp,den,f,fd,ft,fdd,ftt,fdt,fddt,fdtt,fddtt)
            double precision :: t,d,h,err, dfridr2
       end function
    
-      !function freedt(t,d)
-      !   implicit none
-      !   double precision, intent(in) :: t, d
-      !   double precision :: freedt
-      !   double precision :: f, ft, fd, ftt, fdd
-      !end function freedt
-   
       function helm_energy(t,d)
               implicit none
               double precision, intent(in) :: t,d
               double precision :: helm_energy
-              double precision :: ft,fd,fdd,fdt,ftt
+              double precision :: ft,fd,fdd,fdt,ftt,dpdd,mu,dmudd,dmudt,ne,dnedd,dnedt
       end function helm_energy
    
-      subroutine eosfxt(t,d,a,z,f1,ft1,fd1,ftt1,fdd1,fdt1)
+      subroutine eosfxt(t,d,a,z,f1,ft1,fd1,ftt1,fdd1,fdt1,dpdd1,dpdt1,mu1,dmudd1,dmudt1,ne1,dnedd1,dnedt1)
            implicit none 
            double precision, intent(in) :: t,d,a,z
-           double precision, intent(out) :: f1,fd1,ft1,fdd1,ftt1,fdt1
+           double precision, intent(out) :: f1,fd1,ft1,fdd1,ftt1,fdt1,dpdd1,dpdt1,mu1,dmudd1,dmudt1,ne1,dnedd1,dnedt1
       end subroutine eosfxt
    
    end interface
@@ -107,15 +139,20 @@ subroutine get_helm_table(temp,den,f,fd,ft,fdd,ftt,fdt,fddt,fdtt,fddtt)
    jlo_eos = 1 ; jhi_eos = 1
    
    
-   call eosfxt(temp,den,1.0d0,1.0d0,f,ft,fd,ftt,fdd,fdt)
+   call eosfxt(temp,den,1.0d0,1.0d0,f,ft,fd,ftt,fdd,fdt,dpdd,dpdt,mu,dmudd,dmudt,ne,dnedd,dnedt)
    
-   tmp = den + den/1.0d3
+   tmp = den + den/1.0d1
    delta = tmp - den
    
    fddt = dfridr1(freedt,temp,den,delta,err)
    fdtt = dfridr1(freett,temp,den,delta,err)
    fddtt = dfridr2(freett,temp,den,delta,err)
-   
+   dpddd = dfridr1(deriv_dpdd,temp,den,delta,err)
+   dpddt = dfridr1(deriv_dpdt,temp,den,delta,err)
+   dpdddt= dfridr2(deriv_dpdt,temp,den,delta,err)
+   dmuddt = dfridr1(deriv_dmudt,temp,den,delta,err)
+   dneddt = dfridr1(deriv_dnedt,temp,den,delta,err)
+
    !fddt =   0.0d0 ! dfridr1(freedt,temp,den,delta,err)
    !fdtt =   0.0d0 !  dfridr1(freett,temp,den,delta,err)
    !fddtt =  0.0d0 !   dfridr2(freett,temp,den,delta,err)
@@ -129,8 +166,8 @@ function freedt(t,d)
         implicit none
         double precision, intent(in) :: t, d
         double precision :: freedt
-        double precision :: f, ft, fd, ftt, fdd
-        call eosfxt(t,d,1.0d0,1.0d0,f,ft,fd,ftt,fdd,freedt)
+        double precision :: f, ft, fd, ftt, fdd,dpdd,dpdt,mu,dmudd,dmudt,ne,dnedd,dnedt
+        call eosfxt(t,d,1.0d0,1.0d0,f,ft,fd,ftt,fdd,freedt,dpdd,dpdt,mu,dmudd,dmudt,ne,dnedd,dnedt)
         !print *, "freedt = ", freedt
 end function freedt
 
@@ -138,8 +175,8 @@ function freett(t,d)
         implicit none
         double precision, intent(in) :: d, t
         double precision :: freett
-        double precision :: f, ft, fd, fdd, fdt
-        call eosfxt(t,d,1.0d0,1.0d0,f,ft,fd,freett,fdd,fdt)
+        double precision :: f, ft, fd, fdd, fdt,dpdd,dpdt,mu,dmudd,dmudt,ne,dnedd,dnedt
+        call eosfxt(t,d,1.0d0,1.0d0,f,ft,fd,freett,fdd,fdt,dpdd,dpdt,mu,dmudd,dmudt,ne,dnedd,dnedt)
         !print *, "freedt = ", freedt
 end function freett
 
@@ -147,9 +184,41 @@ function helm_energy(t,d)
         implicit none
         double precision, intent(in) :: t,d
         double precision :: helm_energy
-        double precision :: ft,fd,fdd,fdt,ftt
-        call eosfxt(t,d,1.0d0,1.0d0,helm_energy,ft,fd,ftt,fdd,fdt)
+        double precision :: ft,fd,fdd,fdt,ftt,dpdd,dpdt,mu,dmudd,dmudt,ne,dnedd,dnedt
+        call eosfxt(t,d,1.0d0,1.0d0,helm_energy,ft,fd,ftt,fdd,fdt,dpdd,dpdt,mu,dmudd,dmudt,ne,dnedd,dnedt)
 end function helm_energy
+
+function deriv_dpdd(t,d)
+        implicit none
+        double precision, intent(in) :: t,d
+        double precision :: deriv_dpdd
+        double precision :: f,ft,fd,fdd,fdt,ftt,dpdt,mu,dmudt,dmudd,ne,dnedd,dnedt
+        call eosfxt(t,d,1.0d0,1.0d0,f,ft,fd,ftt,fdd,fdt,deriv_dpdd,dpdt,mu,dmudd,dmudt,ne,dnedd,dnedt)
+end function deriv_dpdd
+
+function deriv_dpdt(t,d)
+        implicit none
+        double precision, intent(in) :: t,d
+        double precision :: deriv_dpdt
+        double precision :: f,ft,fd,fdd,fdt,ftt,dpdd,mu,dmudt,dmudd,ne,dnedd,dnedt
+        call eosfxt(t,d,1.0d0,1.0d0,f,ft,fd,ftt,fdd,fdt,dpdd,deriv_dpdt,mu,dmudd,dmudt,ne,dnedd,dnedt)
+end function deriv_dpdt
+
+function deriv_dmudt(t,d)
+        implicit none
+        double precision, intent(in) :: t,d
+        double precision :: deriv_dmudt
+        double precision :: f,ft,fd,fdd,fdt,ftt,dpdd,dpdt,mu,dmudd,ne,dnedd,dnedt
+        call eosfxt(t,d,1.0d0,1.0d0,f,ft,fd,ftt,fdd,fdt,dpdd,dpdt,mu,dmudd,deriv_dmudt,ne,dnedd,dnedt)
+end function deriv_dmudt
+
+function deriv_dnedt(t,d)
+        implicit none
+        double precision, intent(in) :: t,d
+        double precision :: deriv_dnedt
+        double precision :: f,ft,fd,fdd,fdt,ftt,dpdd,dpdt,mu,dmudd,dmudt,ne,dnedd
+        call eosfxt(t,d,1.0d0,1.0d0,f,ft,fd,ftt,fdd,fdt,dpdd,dpdt,mu,dmudd,dmudt,ne,dnedd,deriv_dnedt)
+end function deriv_dnedt
 
 function dfridr1(func,x,y,h,err)
     implicit none
@@ -172,17 +241,16 @@ function dfridr1(func,x,y,h,err)
     !NTAB. Return when error is SAFE worse than the best so far.
     INTEGER i,j
     double precision errt,fac,hh,a(NTAB,NTAB)
-    !hh=func(x,y)/1.0d2
     hh=h
-    !print *, "func(x,y+hh) = ", func(x,y+hh)
-    !print *, "func(x,y-hh) = ", func(x,y-hh)
-    a(1,1) = (func(x,y+hh) - func(x,y-hh)) / (2.0d0*hh)
+    !2nd order accurate
+    !a(1,1) = (-func(x,y+hh) - func(x,y-hh)) / (2.0d0*hh)
+    !4th order accurate
+    a(1,1) = (-func(x,y+2.0d0*hh) + 8.0d0*func(x,y+hh) - 8.0d0*func(x,y-hh) + func(x,y-2.0d0*hh)) / (12.0d0*hh)
     err=BIG
     do i=2,NTAB !Successive columns in the Neville tableau will go to smaller
         hh=hh/CON !stepsizes and higher orders of extrapolation.
-        !print *, "func(x,y+hh) = ", func(x,y+hh)
-        !print *, "func(x,y-hh) = ", func(x,y-hh)
-        a(1,i) = (func(x,y+hh) - func(x,y-hh)) / (2.0d0*hh)
+        !a(1,i) = (func(x,y+hh) - func(x,y-hh)) / (2.0d0*hh)
+        a(1,i) = (-func(x,y+2.0d0*hh) + 8.0d0*func(x,y+hh) - 8.0d0*func(x,y-hh) + func(x,y-2.0d0*hh)) / (12.0d0*hh)
         fac=CON2
         do j=2,i !Compute extrapolations of various orders, requiring no new
             a(j,i)=(a(j-1,i)*fac-a(j-1,i-1))/(fac-1.) !function evaluations.
@@ -223,15 +291,19 @@ function dfridr2(func,x,y,h,err)
     INTEGER i,j
     double precision errt,fac,hh,a(NTAB,NTAB)
     hh=h
-    !print *, "func(x,y+hh) = ", func(x,y+hh)
-    !print *, "func(x,y-hh) = ", func(x,y-hh)
+    !2nd order accurate
     a(1,1) = (func(x,y+hh) - 2.0d0*func(x,y) + func(x,y-hh)) / (hh*hh)
+    !4th order accurate
+    a(1,1) = (-func(x,y+2.0d0*hh) + 16.0d0*func(x,y+hh) - 30.0d0*func(x,y) &
+            + 16.0d0*func(x,y-hh) - func(x,y-2.0d0*hh))/(12.0d0*(hh*hh))
+
     err=BIG
     do i=2,NTAB !Successive columns in the Neville tableau will go to smaller
         hh=hh/CON !stepsizes and higher orders of extrapolation.
-        !print *, "func(x,y+hh) = ", func(x,y+hh)
-        !print *, "func(x,y-hh) = ", func(x,y-hh)
-        a(1,i) = (func(x,y+hh) - 2.0d0*func(x,y) + func(x,y-hh)) / (hh*hh)
+        !a(1,i) = (func(x,y+hh) - 2.0d0*func(x,y) + func(x,y-hh)) / (hh*hh)
+        a(1,i) = (-func(x,y+2.0d0*hh) + 16.0d0*func(x,y+hh) - 30.0d0*func(x,y) &
+                + 16.0d0*func(x,y-hh) - func(x,y-2.0d0*hh))/(12.0d0*(hh*hh))
+
         fac=CON2
         do j=2,i !Compute extrapolations of various orders, requiring no new
             a(j,i)=(a(j-1,i)*fac-a(j-1,i-1))/(fac-1.) !function evaluations.
@@ -312,7 +384,9 @@ end function dfridr3
 
 
       subroutine eosfxt(temp, den, abar, zbar, free, freet, freed, &
-                      freett, freedd, freedt)
+                      freett, freedd, freedt,&
+                      eos_dpdd,eos_dpdt,eos_mu,eos_dmudd,eos_dmudt,&
+                      eos_ne,eos_dnedd,eos_dnedt)
       include 'implno.dek'
       include 'const.dek'
       include 'vector_eos.dek'
@@ -580,6 +654,8 @@ end function dfridr3
 ! declare the input
       double precision, intent(in) :: temp,den,zbar,abar
       double precision, intent(out) :: free, freet, freed, freett, freedd, freedt
+      double precision, intent(out) :: eos_dpdd,eos_dpdt,eos_mu,eos_dmudd,eos_dmudt,&
+                      eos_ne,eos_dnedd,eos_dnedt
       double precision :: e121,s121,p121,d121,t121
 
 ! declare local variables
@@ -2699,18 +2775,18 @@ end function dfridr3
         freedd = 1.0d0/(d121**(2)) *(dpepd_row(1)) -2.0d0 * p121/(d121**(3))
         freett = -dsept_row(1)
         freedt = (1.0d0/(d121**(2))) * dpept_row(1)
-
+        !              eos_dpdd,eos_mu,eos_dmudd,eos_dmudt,&
+        !              eos_ne,eos_dnedd,eos_dnedt)
+        eos_dpdd = dpepd_row(1)
+        eos_dpdt = dpept_row(1) 
+        eos_mu = etaele_row(1)
+        eos_dmudd = detad_row(1)
+        eos_dmudt = detat_row(1)
+        eos_ne = xne_row(1) + xnp_row(1)
+        eos_dnedd = dxned_row(1)
+        eos_dnedt = dxnet_row(1)  
       return
       end subroutine eosfxt
-
-
-
-
-
-
-
-
-
 
 
       subroutine xneroot(mode,den,temp,abar,zbar,ionized,potmult,aa, &
@@ -5357,53 +5433,3 @@ end function dfridr3
       return
       end
 
-function square(x)
-  implicit none
-  double precision, intent(in) ::  x
-  double precision :: square
-  square = x*x
-
-end function  
-
-function sine(x)
-  implicit none
-  double precision, intent(in) ::  x
-  double precision :: sine
-  sine = sin(x)
-
-end function  
-function dfree1(temp, rho, rho1, h)
-   implicit none
-   include 'vector_eos.dek'
-   double precision dfree1, rho, temp, rho1, h, s, p
-   s = (sele_row(1) + spos_row(1))
-   p = (pele_row(1) + ppos_row(1))
-   dfree1 = - s * (temp+h - (temp-h)) + p * rho/(rho1*rho1) 
-   !dfree1 = - s * temp + p *(2.0d0*h)
-
-end function
-function helm_free(rho, temp)
-   implicit none
-   include 'vector_eos.dek'
-   double precision helm_free, rho, temp
-   double precision e,s,p,t,d,f,fd,ft,fdd,ftt,fdt
-   integer j
-   j = 1
-   e = (eele_row(j) + epos_row(j))
-   s = (sele_row(j) + spos_row(j))
-   p = (pele_row(j) + ppos_row(j))
-   t = temp_row(j)
-   d = den_row(j)
-
-   f =  e - t * s
-   fd =  p / (d**(2))
-   ft = -s
-   fdd = 1.0d0/(d**(2)) *(dpepd_row(j)) -2.0d0 * p/(d**(3))
-   ftt = -dsept_row(j)
-   fdt = (1.0d0/(d**(2))) * dpept_row(j)
-
-   helm_free = f + fd * (rho - d) + ft * (temp - t) &
-               + fdt * (rho - d) * (temp - t) &
-               + 0.5d0 * (fdd * (rho - d)*(rho - d) &
-               + ftt * (temp - t)*(temp - t))
-end function
